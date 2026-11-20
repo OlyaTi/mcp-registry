@@ -1,0 +1,50 @@
+name: Mnemoverse entry check
+
+# Runs in the OlyaTi/mcp-registry fork only. It repeats Docker's "Code and Server Validation"
+# for the servers/mnemoverse entry on the add-mnemoverse-key branch: tools built from
+# docker/mcp-registry main, then the same ci-validation.sh with the changed server.
+
+on:
+  push:
+    branches: [mnemoverse-check]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out Docker's main for tooling
+        uses: actions/checkout@v4
+        with:
+          repository: docker/mcp-registry
+          ref: main
+          path: main-tooling
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+
+      - name: Build the validation tools from main
+        run: |
+          cd main-tooling
+          mkdir -p ../bin
+          go build -o ../bin/validate ./cmd/validate
+          go build -o ../bin/build ./cmd/build
+          go build -o ../bin/catalog ./cmd/catalog
+          go build -o ../bin/clean ./cmd/clean
+
+      - name: Check out the entry branch
+        uses: actions/checkout@v4
+        with:
+          ref: add-mnemoverse-key
+          path: pr-workspace
+
+      - name: Validate, build and catalog the entry
+        run: |
+          printf 'servers/mnemoverse/server.yaml\n' > changed-servers.txt
+          bash main-tooling/scripts/ci-validation.sh --bin-dir "$PWD/bin" --workspace "$PWD/pr-workspace" --changed-servers "$PWD/changed-servers.txt"
